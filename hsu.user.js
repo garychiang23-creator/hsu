@@ -1,14 +1,22 @@
 // ==UserScript==
 // @name         許氏注音（Safari 就地輸入）
 // @namespace    hsu_ime
-// @version      1.2
+// @version      1.3
 // @description  在 Safari 的任何輸入框裡用許氏注音打中文。引擎＝小麥注音網頁版（MIT）。
 // @author       Gary + Claude
 // @match        *://*/*
+// @noframes
 // @require      https://garychiang23-creator.github.io/hsu/vendor/mcbopomofo.bundle.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
+
+/* 為什麼有 @noframes（2026-08-05 實測後加的，別拿掉）
+ * 沒有它的話，5.2MB 引擎會在**每一個 iframe** 各解析一次。
+ * claude.ai 實測：腳本跑進 a.claude.ai/isolated-segment.html 這個 innerHeight=0 的
+ * 隱藏分析 iframe，白燒一次 323ms，還在看不見的地方建了一條浮動列。
+ * 代價：iframe 裡的輸入框用不到。可接受——claude.ai 和 Google 的輸入框都在頂層。
+ */
 
 /* 設計筆記（改之前先讀）
  *
@@ -375,6 +383,6 @@
   logViewport("init");
   // @match 開到全站之後，每頁都要吃 5.2MB 引擎的解析成本。
   // 印出「從導覽開始到腳本跑完」的毫秒數，用量的決定要不要把 @match 收窄。
-  console.log("[hsu] 許氏注音 v1.2 已載入（" + Math.round(performance.now()) + "ms，模式：" +
+  console.log("[hsu] 許氏注音 v1.3 已載入（" + Math.round(performance.now()) + "ms，模式：" +
     (chinese ? "中文" : "英文") + "）。Shift 切中／英，⌃⇧K 診斷，⇅ 翻上下。");
 })();
