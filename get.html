@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>取得腳本</title>
+<style>
+  :root{color-scheme:light dark}
+  body{margin:0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+    font:16px/1.6 -apple-system,"PingFang TC",sans-serif;
+    background:#16181d;color:#e8eaf0}
+  @media (prefers-color-scheme:light){body{background:#f6f7f9;color:#1c1f26}}
+  h1{font-size:19px;margin:0 0 4px}
+  p{margin:0 0 16px;color:#8b93a5;font-size:14px}
+  .card{border:1px solid #2c313c;border-radius:12px;padding:14px;margin:0 0 18px}
+  @media (prefers-color-scheme:light){.card{border-color:#dfe3ea;background:#fff}}
+  .name{font-weight:700;margin:0 0 2px}
+  .desc{font-size:13px;color:#8b93a5;margin:0 0 12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  button,a.btn{font:inherit;font-size:15px;padding:11px 18px;border-radius:10px;
+    border:1px solid #2c313c;background:transparent;color:inherit;cursor:pointer;
+    text-decoration:none;display:inline-block}
+  button.main{background:#7fb2ff;color:#16181d;border-color:#7fb2ff;font-weight:700}
+  textarea{width:100%;height:130px;margin-top:12px;padding:10px;border-radius:8px;
+    border:1px solid #2c313c;background:#0f1116;color:#8b93a5;
+    font:12px/1.5 ui-monospace,Menlo,monospace;display:none}
+  textarea.show{display:block}
+  .ok{color:#6ee39a}
+</style>
+</head>
+<body>
+<h1>許氏注音 · 取得腳本</h1>
+<p>按「複製全部」→ 到 Userscripts App 貼上。不需要 iCloud。</p>
+
+<div class="card" data-file="hsu.user.js">
+  <div class="name">hsu.user.js</div>
+  <div class="desc">本體。在 claude.ai 和 Google 的輸入框裡用許氏注音打中文。</div>
+  <div class="row">
+    <button class="main" data-act="copy">複製全部</button>
+    <a class="btn" href="hsu.user.js" download="hsu.user.js">下載檔案</a>
+    <button data-act="peek">看內容</button>
+  </div>
+  <textarea readonly></textarea>
+</div>
+
+<div class="card" data-file="probe_l2.user.js">
+  <div class="name">probe_l2.user.js</div>
+  <div class="desc">精簡探針。本體出問題時，用它單獨測「文字塞不塞得進去」。平常不必裝。</div>
+  <div class="row">
+    <button data-act="copy">複製全部</button>
+    <a class="btn" href="probe_l2.user.js" download="probe_l2.user.js">下載檔案</a>
+    <button data-act="peek">看內容</button>
+  </div>
+  <textarea readonly></textarea>
+</div>
+
+<script>
+document.querySelectorAll(".card").forEach(function (card) {
+  var file = card.getAttribute("data-file");
+  var ta = card.querySelector("textarea");
+  var loaded = null;
+
+  function load() {
+    if (loaded) return Promise.resolve(loaded);
+    return fetch(file).then(function (r) { return r.text(); }).then(function (t) {
+      loaded = t; ta.value = t; return t;
+    });
+  }
+
+  card.querySelectorAll("button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var act = btn.getAttribute("data-act");
+      if (act === "peek") {
+        load().then(function () { ta.classList.toggle("show"); });
+        return;
+      }
+      load().then(function (text) {
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = "✓ 已複製";
+          btn.classList.add("ok");
+          setTimeout(function () { btn.textContent = old; btn.classList.remove("ok"); }, 2000);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+        } else { fallback(text); done(); }
+      });
+    });
+  });
+
+  function fallback(text) {
+    ta.classList.add("show");
+    ta.value = text;
+    ta.focus(); ta.setSelectionRange(0, text.length);
+    try { document.execCommand("copy"); } catch (e) {}
+  }
+});
+</script>
+</body>
+</html>
