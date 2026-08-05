@@ -31,15 +31,15 @@
 <body>
 <h1>許氏注音 · 取得腳本</h1>
 <p>按「複製全部」→ 到 Userscripts App 貼上。不需要 iCloud。</p>
+<div id="ver" class="card" style="border-color:#7fb2ff">讀取線上版本中…</div>
 
 <div class="card" data-file="hsu.user.js">
   <div class="name">hsu.user.js</div>
   <div class="desc"><b>要裝的就是這支。</b>在 Safari 任何網頁的輸入框裡用許氏注音打中文。<br>
-    ⚠️ 它只有 700 多個字元，看起來很短是<b>正常的</b>——真正的程式碼和注音引擎都在雲端，
-    由它去抓。這樣設計的好處：以後改版你只要重新整理網頁，不必再搬檔案。</div>
+    複製或下載前，先看上面那格顯示的版本號——那是<b>當下真的抓到的</b>內容，不是猜的。</div>
   <div class="row">
     <button class="main" data-act="copy">複製全部</button>
-    <a class="btn" href="hsu.user.js" download="hsu.user.js">下載檔案</a>
+    <a class="btn" href="hsu.user.js" download="hsu.user.js" data-bust="1">下載檔案</a>
     <button data-act="peek">看內容</button>
   </div>
   <textarea readonly></textarea>
@@ -50,7 +50,7 @@
   <div class="desc">精簡探針。本體出問題時，用它單獨測「文字塞不塞得進去」。平常不必裝。</div>
   <div class="row">
     <button data-act="copy">複製全部</button>
-    <a class="btn" href="probe_l2.user.js" download="probe_l2.user.js">下載檔案</a>
+    <a class="btn" href="probe_l2.user.js" download="probe_l2.user.js" data-bust="1">下載檔案</a>
     <button data-act="peek">看內容</button>
   </div>
   <textarea readonly></textarea>
@@ -64,7 +64,8 @@ document.querySelectorAll(".card").forEach(function (card) {
 
   function load() {
     if (loaded) return Promise.resolve(loaded);
-    return fetch(file).then(function (r) { return r.text(); }).then(function (t) {
+    return fetch(file + '?cb=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.text(); }).then(function (t) {
       loaded = t; ta.value = t; return t;
     });
   }
@@ -97,6 +98,26 @@ document.querySelectorAll(".card").forEach(function (card) {
     try { document.execCommand("copy"); } catch (e) {}
   }
 });
+
+// 下載連結加上防快取參數（否則 Safari／SW 會給你舊檔）
+document.querySelectorAll('a[data-bust]').forEach(function (a) {
+  a.href = a.getAttribute('href').split('?')[0] + '?cb=' + Date.now();
+});
+
+// 把「線上真正的版本」直接印在頁面上，不用再靠猜
+fetch('hsu.user.js?cb=' + Date.now(), { cache: 'no-store' })
+  .then(function (r) { return r.text(); })
+  .then(function (t) {
+    var v = (t.match(/@version\s+(\S+)/) || [])[1] || '?';
+    var kb = (t.length / 1024).toFixed(1);
+    document.getElementById('ver').innerHTML =
+      '<b>線上目前版本：v' + v + '</b>（' + kb + ' KB）<br>' +
+      '<span style="font-size:13px;color:#8b93a5">貼進 Userscripts 之後，' +
+      '浮動列左邊那顆「中／英」如果點得動，就是 v1.5 以上生效了。</span>';
+  })
+  .catch(function () {
+    document.getElementById('ver').textContent = '讀不到線上版本（網路問題？）';
+  });
 </script>
 </body>
 </html>
