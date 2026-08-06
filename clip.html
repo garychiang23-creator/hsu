@@ -178,6 +178,9 @@
     if (!t) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(t).then(onOk, function () {
+        // 自動複製現在是每次輸入都跑，失敗訊息只報一次，不要洗版
+        if (copyFailed) return;
+        copyFailed = true;
         setStatus("複製失敗，請用「複製」鈕", false);
       });
     } else {
@@ -191,11 +194,19 @@
     }
   }
 
+  /* autoCopy 必須掛在**所有**會改變內容的路徑上，不是只有中文送出。
+     踩過：一開始只在 commit() 裡呼叫，結果英文模式（按鍵不經引擎、直接進 textarea）
+     打的字完全不會進剪貼簿，中英夾雜時只複製到中文那部分。
+     現在 commit()（中文送出）與 input 事件（英文／標點／刪字／貼上）兩邊都呼叫。 */
+  var copyFailed = false;
   function autoCopy() {
     if (!autoOn) return;
     var t = plainText();
     if (!t) return;
-    writeClipboard(t, function () { setStatus("✓ 已複製 " + charCount(t) + " 字", true); });
+    writeClipboard(t, function () {
+      copyFailed = false;
+      setStatus("✓ 已複製 " + charCount(t) + " 字", true);
+    });
   }
 
   /* ---------- 候選列 ---------- */
@@ -305,7 +316,9 @@
     catch (e) {}
     updateCount();
   }
-  ta.addEventListener("input", function () { scheduleSave(); updateCount(); });
+  // input 事件涵蓋：英文模式打字、標點、退格刪字、⌘V 貼進來。
+  // （中文組字走 setRangeText，程式性修改不會觸發 input，所以不會重複複製。）
+  ta.addEventListener("input", function () { scheduleSave(); updateCount(); autoCopy(); });
   function charCount(t) { return t.replace(/\s/g, "").length; }
   function updateCount() { countEl.textContent = charCount(plainText()) + " 字"; }
 
