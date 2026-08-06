@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         許氏注音（Safari 就地輸入）
 // @namespace    hsu_ime
-// @version      1.5
+// @version      1.6
 // @description  在 Safari 的任何輸入框裡用許氏注音打中文。引擎＝小麥注音網頁版（MIT）。
 // @author       Gary + Claude
 // @match        *://*/*
+// @exclude      https://garychiang23-creator.github.io/hsu/*
 // @noframes
 // @require      https://garychiang23-creator.github.io/hsu/vendor/mcbopomofo.bundle.js
 // @grant        none
