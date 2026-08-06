@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="許氏便條">
+<meta name="theme-color" content="#16181d">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>許氏便條 · Clip Pad</title>
+<style>
+  :root{
+    --bg:#16181d; --panel:#1e2129; --line:#2c313c; --fg:#e8eaf0; --dim:#8b93a5;
+    --accent:#7fb2ff; --ok:#5fd08a; --ok-bg:#1c3a2a;
+    --warn-bg:#4a2c12; --warn-fg:#ffc98a; --warn-line:#7a4c1d; --sel:#2d4a7c;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f6f7f9; --panel:#ffffff; --line:#dfe3ea; --fg:#1c1f26; --dim:#6b7383;
+      --accent:#1f5fbf; --ok:#1c7c46; --ok-bg:#dcf3e5;
+      --warn-bg:#fff3d9; --warn-fg:#7a4c00; --warn-line:#e6c383; --sel:#cfe0ff;
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Heiti TC","Noto Sans TC",sans-serif}
+  #app{display:flex;flex-direction:column;height:100dvh;
+    padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+
+  /* 頂列：Split View 下寬度可能只有 ~320px，所以一切從緊 */
+  #top{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 10px;
+    border-bottom:1px solid var(--line);background:var(--panel)}
+  #mode{font-weight:700;font-size:14px;padding:2px 10px;border-radius:999px;
+    background:var(--accent);color:var(--bg);border:0;cursor:pointer;font-family:inherit}
+  #mode.en{background:var(--line);color:var(--dim)}
+  #status{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #status.ok{color:var(--ok);font-weight:600}
+  #count{margin-left:auto;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  #warn{flex:0 0 auto;display:none;padding:9px 12px;font-size:13px;line-height:1.5;
+    background:var(--warn-bg);color:var(--warn-fg);border-bottom:1px solid var(--warn-line)}
+  #warn.show{display:block}
+
+  #tip{flex:0 0 auto;display:none;padding:9px 12px;font-size:13px;line-height:1.55;
+    background:var(--panel);color:var(--dim);border-bottom:1px solid var(--line)}
+  #tip.show{display:block}
+  #tip b{color:var(--fg)}
+  #tip button{float:right;margin-left:8px;font-family:inherit;font-size:12px;padding:2px 8px;
+    border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--dim);cursor:pointer}
+
+  #ta{flex:1 1 auto;width:100%;min-height:0;resize:none;border:0;outline:0;
+    background:var(--bg);color:var(--fg);padding:14px 12px;
+    font-family:inherit;font-size:20px;line-height:1.8;letter-spacing:.02em;
+    -webkit-user-select:text}
+
+  #cand{flex:0 0 auto;display:none;align-items:center;gap:2px;overflow-x:auto;
+    padding:7px 8px;background:var(--panel);border-top:1px solid var(--line);scrollbar-width:none}
+  #cand::-webkit-scrollbar{display:none}
+  #cand.show{display:flex}
+  .cand{display:inline-flex;align-items:baseline;gap:4px;flex:0 0 auto;
+    padding:5px 9px;border-radius:8px;font-size:19px;white-space:nowrap;cursor:pointer}
+  .cand.sel{background:var(--sel)}
+  .cand i{font-style:normal;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  #page{flex:0 0 auto;margin-left:auto;padding-left:8px;font-size:11px;color:var(--dim)}
+
+  #tools{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;padding:7px 10px;
+    padding-bottom:calc(7px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:var(--panel)}
+  #tools button{flex:0 0 auto;font-family:inherit;font-size:13px;padding:7px 11px;
+    border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+  #tools button:active{background:var(--line)}
+  #auto{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);
+    padding:7px 11px;border:1px solid var(--line);border-radius:9px;cursor:pointer;user-select:none}
+  #auto.on{color:var(--ok);border-color:var(--ok);background:var(--ok-bg)}
+  #auto span{font-weight:700}
+
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);color:var(--dim);font-size:15px;z-index:50}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button id="mode" type="button">中文</button>
+    <span id="status">便條 · 自動複製</span>
+    <span id="count">0 字</span>
+  </div>
+
+  <div id="warn">
+    <b>⚠️ 系統輸入法正在攔截按鍵</b><br>
+    請把 iPad 輸入來源切成「ABC／英文」：按 <b>🌐</b> 鍵，或 <b>⌃-空白鍵</b>。
+  </div>
+
+  <div id="tip">
+    <button id="tip-x" type="button">知道了</button>
+    <b>用法</b>：把這頁跟目標 App 並排（Split View），在這邊打字，
+    每送出一個詞就<b>自動進剪貼簿</b>，切過去 <b>⌘V</b> 就好。
+  </div>
+
+  <textarea id="ta" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+    placeholder="直接打字。Shift 單擊切中／英。"></textarea>
+
+  <div id="cand"></div>
+
+  <div id="tools">
+    <label id="auto" class="on"><span>⏱</span>自動複製</label>
+    <button id="btn-copy" type="button">複製</button>
+    <button id="btn-cut" type="button">複製並清空</button>
+    <button id="btn-clear" type="button">清空</button>
+  </div>
+</div>
+
+<div id="boot">載入注音引擎…</div>
+
+<script src="vendor/mcbopomofo.bundle.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var ta = $("ta"), cand = $("cand"), warn = $("warn"), modeBtn = $("mode"),
+      countEl = $("count"), statusEl = $("status"), autoEl = $("auto");
+
+  /* ---------- 組字區（與 index.html 同一套做法：我方掌握組字段落） ---------- */
+  var composing = "", compStart = null;
+
+  function setComposing(text) {
+    if (compStart === null) { if (text === "") return; compStart = ta.selectionStart; }
+    ta.setRangeText(text, compStart, compStart + composing.length, "end");
+    composing = text;
+    if (text === "") compStart = null;
+    scheduleSave();
+  }
+  function commit(text) {
+    if (compStart === null) compStart = ta.selectionStart;
+    ta.setRangeText(text, compStart, compStart + composing.length, "end");
+    composing = ""; compStart = null;
+    scheduleSave(); updateCount();
+    autoCopy();                       // ← Clip Pad 的核心：送出即進剪貼簿
+  }
+  function clearComposing() {
+    if (compStart !== null) ta.setRangeText("", compStart, compStart + composing.length, "end");
+    composing = ""; compStart = null;
+  }
+
+  function plainText() {
+    if (compStart === null) return ta.value;
+    return ta.value.slice(0, compStart) + ta.value.slice(compStart + composing.length);
+  }
+
+  /* ---------- 自動複製 ----------
+     能成立的關鍵：commit() 是從 keydown 處理器裡同步呼叫進來的，
+     所以還在使用者手勢裡，Safari 才允許寫剪貼簿。
+     搬去 setTimeout 或 blur 事件就會被擋 —— 別改。 */
+  var AUTO_KEY = "hsu_clip_auto", autoOn = true;
+  try { autoOn = localStorage.getItem(AUTO_KEY) !== "0"; } catch (e) {}
+  function paintAuto() {
+    autoEl.className = autoOn ? "on" : "";
+    if (!autoOn) setStatus("便條 · 手動複製", false);
+    else setStatus("便條 · 自動複製", false);
+  }
+  autoEl.addEventListener("click", function () {
+    autoOn = !autoOn;
+    try { localStorage.setItem(AUTO_KEY, autoOn ? "1" : "0"); } catch (e) {}
+    paintAuto(); ta.focus();
+  });
+
+  var statusTimer = null;
+  function setStatus(msg, ok) {
+    statusEl.textContent = msg;
+    statusEl.className = ok ? "ok" : "";
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+    if (ok) statusTimer = setTimeout(paintAuto, 2500);
+  }
+
+  function writeClipboard(t, onOk) {
+    if (!t) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(onOk, function () {
+        setStatus("複製失敗，請用「複製」鈕", false);
+      });
+    } else {
+      // 舊路徑會搶走 focus，只在手動複製時用
+      var tmp = document.createElement("textarea");
+      tmp.value = t; tmp.style.position = "fixed"; tmp.style.opacity = "0";
+      document.body.appendChild(tmp); tmp.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(tmp); ta.focus();
+      onOk();
+    }
+  }
+
+  function autoCopy() {
+    if (!autoOn) return;
+    var t = plainText();
+    if (!t) return;
+    writeClipboard(t, function () { setStatus("✓ 已複製 " + charCount(t) + " 字", true); });
+  }
+
+  /* ---------- 候選列 ---------- */
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function renderCandidates(st) {
+    var list = st.candidates || [];
+    if (!list.length) { cand.className = ""; cand.innerHTML = ""; return; }
+    var html = list.map(function (w) {
+      var c = w.candidate || {};
+      var text = c.displayedText || c.value || "";
+      return '<span class="cand' + (w.selected ? " sel" : "") + '" data-k="' +
+             esc(w.keyCap) + '"><i>' + esc(w.keyCap) + "</i>" + esc(text) + "</span>";
+    }).join("");
+    if (st.candidatePageCount > 1) {
+      html += '<span id="page">' + ((st.candidatePageIndex | 0) + 1) + " / " + st.candidatePageCount + "</span>";
+    }
+    cand.innerHTML = html; cand.className = "show";
+  }
+  cand.addEventListener("pointerdown", function (e) { e.preventDefault(); });
+  cand.addEventListener("click", function (e) {
+    var el = e.target.closest ? e.target.closest(".cand") : null;
+    if (!el || !controller) return;
+    try { controller.simpleKeyboardEvent(el.getAttribute("data-k"), false, false); }
+    catch (err) { console.warn("candidate tap failed", err); }
+  });
+
+  /* ---------- 引擎 ---------- */
+  var controller = null;
+  var ui = {
+    reset: function () { clearComposing(); cand.className = ""; cand.innerHTML = ""; },
+    commitString: function (text) { if (text) commit(text); },
+    update: function (json) {
+      var st; try { st = JSON.parse(json); } catch (e) { return; }
+      setComposing((st.composingBuffer || []).map(function (s) { return s.text || ""; }).join(""));
+      renderCandidates(st); updateCount();
+    }
+  };
+  function boot() {
+    if (!window.mcbopomofo) { $("boot").textContent = "注音引擎載入失敗，請重新整理。"; return; }
+    controller = new window.mcbopomofo.InputController(ui);
+    controller.setKeyboardLayout("Hsu");          // ← 許氏
+    controller.setLanguageCode("zh-TW");
+    controller.setUserVerticalCandidates(false);
+    if (controller.setOnError) controller.setOnError(function () {});
+    $("boot").className = "gone";
+    restore(); paintAuto();
+    try { if (localStorage.getItem("hsu_clip_tip") !== "0") $("tip").className = "show"; } catch (e) {}
+    ta.focus();
+  }
+  $("tip-x").addEventListener("click", function () {
+    $("tip").className = "";
+    try { localStorage.setItem("hsu_clip_tip", "0"); } catch (e) {}
+    ta.focus();
+  });
+
+  /* ---------- 中／英 ---------- */
+  var alphabetMode = false;
+  function setMode(en) {
+    alphabetMode = en;
+    modeBtn.textContent = en ? "英文" : "中文";
+    modeBtn.className = en ? "en" : "";
+    if (controller) controller.reset();
+    clearComposing(); cand.className = ""; cand.innerHTML = ""; ta.focus();
+  }
+  modeBtn.addEventListener("click", function () { setMode(!alphabetMode); });
+
+  /* ---------- 系統輸入法攔截偵測 ---------- */
+  var warned = false;
+  function showWarn() { if (!warned) { warned = true; warn.className = "show"; } }
+  function hideWarn() { if (warned) { warned = false; warn.className = ""; } }
+  function intercepted(e) { return e.isComposing === true || e.keyCode === 229 || e.key === "Process"; }
+  ta.addEventListener("compositionstart", showWarn);
+
+  /* ---------- 按鍵 ---------- */
+  var shiftAlone = false;
+  ta.addEventListener("keydown", function (e) {
+    if (intercepted(e)) { showWarn(); return; }
+    if (e.metaKey) { shiftAlone = false; return; }     // ⌘C/⌘V/⌘A 放行
+    shiftAlone = (e.key === "Shift" && !e.repeat);
+    if (e.key === "Shift") return;
+    if (e.key && e.key.length === 1) hideWarn();
+    if (alphabetMode || !controller) return;
+    if (controller.keyEvent(e)) e.preventDefault();
+  });
+  ta.addEventListener("keyup", function (e) {
+    if (e.key === "Shift" && shiftAlone) setMode(!alphabetMode);
+    shiftAlone = false;
+  });
+  ta.addEventListener("pointerdown", function () {
+    if (compStart !== null && controller) controller.reset();
+  });
+
+  /* ---------- 草稿（獨立的 key，不跟寫字台互相蓋掉） ---------- */
+  var KEY = "hsu_clip_draft_v1", saveTimer = null;
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      try { localStorage.setItem(KEY, plainText()); } catch (e) {}
+    }, 400);
+  }
+  function restore() {
+    try { var v = localStorage.getItem(KEY); if (v) { ta.value = v; ta.setSelectionRange(v.length, v.length); } }
+    catch (e) {}
+    updateCount();
+  }
+  ta.addEventListener("input", function () { scheduleSave(); updateCount(); });
+  function charCount(t) { return t.replace(/\s/g, "").length; }
+  function updateCount() { countEl.textContent = charCount(plainText()) + " 字"; }
+
+  /* ---------- 工具列 ---------- */
+  $("btn-copy").addEventListener("click", function () {
+    var t = plainText(); if (!t) return;
+    writeClipboard(t, function () { setStatus("✓ 已複製 " + charCount(t) + " 字", true); ta.focus(); });
+  });
+  $("btn-cut").addEventListener("click", function () {
+    var t = plainText(); if (!t) return;
+    writeClipboard(t, function () {
+      if (controller) controller.reset();
+      composing = ""; compStart = null; ta.value = "";
+      scheduleSave(); updateCount(); ta.focus();
+      setStatus("✓ 已複製 " + charCount(t) + " 字並清空", true);
+    });
+  });
+  $("btn-clear").addEventListener("click", function () {
+    if (!plainText()) return;
+    if (!confirm("清空全部文字？")) return;
+    if (controller) controller.reset();
+    composing = ""; compStart = null; ta.value = "";
+    scheduleSave(); updateCount(); ta.focus();
+  });
+
+  /* ---------- 視覺視窗高度（避開 iPad 底部快捷列，見專案 CLAUDE.md） ---------- */
+  function fit() {
+    var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    $("app").style.height = h + "px";
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", fit);
+    window.visualViewport.addEventListener("scroll", fit);
+  }
+  window.addEventListener("resize", fit);
+  fit();
+
+  document.addEventListener("click", function (e) {
+    if (e.target === document.body || e.target.id === "app") ta.focus();
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>
