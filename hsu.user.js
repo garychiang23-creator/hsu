@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         許氏注音（Safari 就地輸入）
 // @namespace    hsu_ime
-// @version      1.6
+// @version      1.7
 // @description  在 Safari 的任何輸入框裡用許氏注音打中文。引擎＝小麥注音網頁版（MIT）。
 // @author       Gary + Claude
 // @match        *://*/*
@@ -43,6 +43,10 @@
  *
  * 6. 前提：iPad 的系統輸入來源必須停在 ABC。停在注音時系統會先吃掉按鍵，
  *    腳本會偵測到並在浮動列上提示。
+ *
+ * 7. 個人詞庫：localStorage 是按網域分開的，所以這裡加的詞**只在當下這個網站有效**，
+ *    跟寫字台／便條那份也不相通。跨網站共用要先 probe Userscripts 的 GM 儲存（未驗證，別直接改 @grant）。
+ *    種子詞跟 pad.js 同一份，smoke test U19 守著。
  */
 
 (function () {
@@ -50,6 +54,8 @@
 
   if (window.__hsu_ime_loaded) return;
   window.__hsu_ime_loaded = true;
+
+  var VERSION = "1.7";   // 跟 @version 一致，smoke test U18 守著
 
   var mcb = window.mcbopomofo;
   if (!mcb || !mcb.InputController) {
@@ -67,7 +73,8 @@
     if (tag === "TEXTAREA") return el;
     if (tag === "INPUT") {
       var t = (el.type || "text").toLowerCase();
-      var okTypes = ["text", "search", "url", "email", "tel", "password", ""];
+      // 不含 password：密碼框裡轉成中文只會打錯，浮動列還會把打的字明碼顯示出來
+      var okTypes = ["text", "search", "url", "email", "tel", ""];
       return okTypes.indexOf(t) >= 0 ? el : null;
     }
     if (el.isContentEditable) return el;
@@ -141,7 +148,7 @@
 
   /* ================= 浮動列 ================= */
 
-  var bar, preedit, cands, badge;
+  var bar, preedit, tipEl, cands, badge;
 
   function buildBar() {
     bar = document.createElement("div");
@@ -175,6 +182,10 @@
     preedit = document.createElement("span");
     preedit.style.cssText = "flex:0 0 auto;font-size:19px;border-bottom:2px solid #7fb2ff;padding-bottom:1px;min-width:1px";
 
+    // 引擎提示（標記時的「按下 Enter 加入詞彙」、排除選單的問句）與我方通知
+    tipEl = document.createElement("span");
+    tipEl.style.cssText = "flex:0 0 auto;font-size:13px;color:#98a2b6;display:none";
+
     cands = document.createElement("span");
     cands.style.cssText = "flex:0 0 auto;display:inline-flex;gap:2px;align-items:center";
 
@@ -193,7 +204,8 @@
       logViewport("flip");
     });
 
-    bar.appendChild(badge); bar.appendChild(preedit); bar.appendChild(cands); bar.appendChild(flip);
+    bar.appendChild(badge); bar.appendChild(preedit); bar.appendChild(tipEl);
+    bar.appendChild(cands); bar.appendChild(flip);
     // 點浮動列不能搶走輸入框的 focus
     bar.addEventListener("pointerdown", function (e) { e.preventDefault(); });
     bar.addEventListener("click", function (e) {
@@ -214,7 +226,17 @@
     var vh = vv ? vv.height : window.innerHeight;
     var voff = vv ? vv.offsetTop : 0;
     var h = bar.offsetHeight || 46;
-    bar.style.top = (barPos === "top" ? voff + 12 : voff + vh - h - 12) + "px";
+    var topY = voff + 12, botY = voff + vh - h - 12;
+    var y = barPos === "top" ? topY : botY, other = barPos === "top" ? botY : topY;
+    // 偏好的位置會蓋到正在打字的那個框（例如 Google 結果頁頂端的搜尋框）就換到另一邊；
+    // 兩邊都會蓋到（佔滿畫面的編輯區）就照偏好。
+    var el = activeEditable();
+    if (el && el.getBoundingClientRect) {
+      var r = el.getBoundingClientRect();
+      var covers = function (t) { return t < r.bottom && t + h > r.top; };
+      if (covers(y) && !covers(other)) y = other;
+    }
+    bar.style.top = y + "px";
   }
 
   // 把實際數字印出來，才知道那條系統快捷列到底吃掉多少高度（diff）。
@@ -241,6 +263,10 @@
     window.visualViewport.addEventListener("scroll", placeBar);
   }
   window.addEventListener("resize", placeBar);
+  // 頁面捲動時輸入框會移動，重新判斷要不要讓開（capture 才收得到內層捲動容器的 scroll）
+  window.addEventListener("scroll", function () {
+    if (bar.style.display !== "none") placeBar();
+  }, { capture: true, passive: true });
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) {
@@ -266,19 +292,58 @@
   /* ================= 引擎 ================= */
 
   var composing = "";
+  var noticeMsg = "", noticeTimer = null, engineTip = "";
+
+  function paintTip() {
+    var t = engineTip || noticeMsg;
+    tipEl.textContent = t;
+    tipEl.style.color = engineTip ? "#98a2b6" : "#6ee39a";
+    tipEl.style.display = t ? "" : "none";
+  }
+
+  function notice(msg) {
+    noticeMsg = msg; paintTip(); showBar(true);
+    if (noticeTimer) clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { noticeMsg = ""; paintTip(); refreshBar(); }, 2500);
+  }
+
+  // 組字列：標記（Shift+←→）的字段反白；游標不在最後時畫一條插入線，方向鍵移進去選字時看得到位置
+  function renderPreedit(segs, cursor) {
+    var html = "", off = 0, total = 0, marked = false;
+    var caret = '<span style="border-left:2px solid #7fb2ff;margin:0 -1px"></span>';
+    segs.forEach(function (s) { total += (s.text || "").length; if (s.style === "highlighted") marked = true; });
+    var showCaret = !marked && cursor < total;
+    segs.forEach(function (s) {
+      var t = s.text || "";
+      if (s.style === "highlighted") {
+        html += '<span style="background:#2d4a7c;border-radius:4px">' + esc(t) + "</span>";
+      } else if (showCaret && cursor >= off && cursor < off + t.length) {
+        html += esc(t.slice(0, cursor - off)) + caret + esc(t.slice(cursor - off));
+      } else {
+        html += esc(t);
+      }
+      off += t.length;
+    });
+    return html;
+  }
 
   var ui = {
-    reset: function () { composing = ""; preedit.textContent = ""; cands.innerHTML = ""; refreshBar(); },
+    reset: function () {
+      composing = ""; engineTip = ""; preedit.textContent = ""; cands.innerHTML = ""; paintTip(); refreshBar();
+    },
     commitString: function (text) {
       if (!text) return;
       if (!inject(text)) toast("✗ 這個輸入框塞不進去\n按 ⌃⇧K 看細節", false);
-      composing = ""; preedit.textContent = ""; cands.innerHTML = ""; refreshBar();
+      composing = ""; engineTip = ""; preedit.textContent = ""; cands.innerHTML = ""; paintTip(); refreshBar();
     },
     update: function (json) {
       var st;
       try { st = JSON.parse(json); } catch (e) { return; }
-      composing = (st.composingBuffer || []).map(function (x) { return x.text || ""; }).join("");
-      preedit.textContent = composing;
+      var segs = st.composingBuffer || [];
+      composing = segs.map(function (x) { return x.text || ""; }).join("");
+      preedit.innerHTML = renderPreedit(segs, st.cursorIndex | 0);
+      engineTip = st.tooltip || "";
+      paintTip();
       var list = st.candidates || [];
       cands.innerHTML = list.map(function (w) {
         var c = w.candidate || {};
@@ -296,6 +361,43 @@
   controller.setLanguageCode("zh-TW");
   controller.setUserVerticalCandidates(false);
   if (controller.setOnError) controller.setOnError(function () {});
+
+  /* ================= 個人詞庫（只在這個網站，見設計筆記 7） ================= */
+
+  var PHRASES_KEY = "__hsu_phrases", EXCLUDED_KEY = "__hsu_excluded";
+  // 跟 pad.js 的 SEED 同一份（smoke test U19 比對）。讀音鍵必須是連字號串起的注音。
+  var SEED = [
+    ["ㄒㄧㄣ-ㄏㄨㄚˊ", ["昕樺"]],
+    ["ㄧ-ㄏㄜˊ", ["一盒"]],
+    ["ㄨㄛˇ-ㄌㄞˊ-ㄉㄧㄥˋ", ["我來訂"]],
+    ["ㄐㄧㄥ-ㄏㄨㄥˊ", ["晶宏"]],
+    ["ㄓㄜˋ-ㄉㄤˇ", ["這檔"]]
+  ];
+
+  function loadMap(key, seed) {
+    var raw = null;
+    try { raw = localStorage.getItem(key); } catch (e) {}
+    if (raw === null) return new Map(seed || []);
+    var m = new Map();
+    try {
+      JSON.parse(raw).forEach(function (p) {
+        if (typeof p[0] !== "string" || !Array.isArray(p[1])) return;
+        var ws = p[1].filter(function (w) { return typeof w === "string" && w; });
+        if (ws.length) m.set(p[0], ws);
+      });
+    } catch (e) {}
+    return m;
+  }
+  function saveMap(key, m) {
+    var arr = [];
+    m.forEach(function (ws, r) { if (ws.length) arr.push([r, ws.slice()]); });
+    try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+  }
+
+  controller.setUserPhrases(loadMap(PHRASES_KEY, SEED));
+  controller.setExcludedPhrases(loadMap(EXCLUDED_KEY));
+  controller.setOnPhraseChange(function (m) { saveMap(PHRASES_KEY, m); notice("✓ 已加入詞庫（只在這個網站）"); });
+  controller.setOnExcludedPhraseChange(function (m) { saveMap(EXCLUDED_KEY, m); notice("✓ 已排除（只在這個網站）"); });
 
   /* ================= 模式與按鍵 ================= */
 
@@ -340,7 +442,13 @@
 
     var el = activeEditable();
     if (!el) { shiftAlone = false; return; }          // 焦點不在輸入框：完全不管
-    if (e.metaKey) { shiftAlone = false; return; }    // ⌘ 組合鍵一律放行
+    // ⌘ 組合鍵一律放行。按下 ⌘ 的當下先把組字送進輸入框：
+    // 不然 claude.ai 按 ⌘Enter 送出時，浮動列上還沒送的字不會跟著送出去。
+    if (e.metaKey || e.key === "Meta") {
+      shiftAlone = false;
+      if (composing) controller.reset();
+      return;
+    }
 
     if (intercepted(e)) {                              // 系統注音在吃鍵
       warnShown = true;
@@ -399,6 +507,6 @@
   logViewport("init");
   // @match 開到全站之後，每頁都要吃 5.2MB 引擎的解析成本。
   // 印出「從導覽開始到腳本跑完」的毫秒數，用量的決定要不要把 @match 收窄。
-  console.log("[hsu] 許氏注音 v1.5 已載入（" + Math.round(performance.now()) + "ms，模式：" +
+  console.log("[hsu] 許氏注音 v" + VERSION + " 已載入（" + Math.round(performance.now()) + "ms，模式：" +
     (chinese ? "中文" : "英文") + "）。Shift 切中／英，⌃⇧K 診斷，⇅ 翻上下。");
 })();

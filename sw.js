@@ -1,13 +1,19 @@
 /* 許氏寫字台 service worker
- * 改版必做：CACHE 版本號 +1，否則 iPad 上拿到的還是舊版。
- * push_deploy.js 有 gate 會擋（index.html 改了但版本沒 +1 = 不准推）。
+ * 改版必做：SHELL 裡任何一支改了，CACHE 版本號就 +1，否則 iPad 上拿到的還是舊版。
+ * push_deploy.js 有 gate 會擋（SHELL 檔案有變但版本沒往前 = 不准推）。
  */
-const CACHE = 'hsu-v2';
+const CACHE = 'hsu-v3';
 
-/* 只有這幾支走 cache-first（離線要能打字）。 */
+/* 頁面本體＋它載入的每一支本地檔，同進同出（離線要能打字）。
+ * 這是「版本一致」的單位：install 時整批一起抓、一起換，
+ * 不會出現新的 clip.html 配上舊的 pad.js。所以頁面載入的本地檔一律要列在這裡，
+ * smoke test 有斷言守著。 */
 const SHELL = [
   './',
   './index.html',
+  './clip.html',
+  './pad.js',
+  './pad.css',
   './manifest.json',
   './vendor/mcbopomofo.bundle.js',
   './icon-180.png',
@@ -25,7 +31,14 @@ const SHELL = [
 const shellUrls = () => new Set(SHELL.map((p) => new URL(p, self.location).href));
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache:'reload' ＝ 繞過瀏覽器的 HTTP 快取直接問伺服器。
+  // GitHub Pages 給 max-age=600：不加的話，十分鐘內開過舊版的 iPad 會把舊檔裝進新版快取，
+  // 然後一直卡到下一次升版。
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(SHELL.map((p) => new Request(p, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -45,7 +58,7 @@ self.addEventListener('fetch', (e) => {
   if (!shellUrls().has(url.origin + url.pathname)) return;
 
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+    caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
       if (res && res.ok && res.type === 'basic') {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));

@@ -1,0 +1,87 @@
+/* 許氏寫字台／便條 共用樣式。頁面自己的差異寫在各頁的 <style> 裡。
+ * ⚠ 在 sw.js 的 SHELL 裡，改了要把 CACHE +1。 */
+:root{
+  --bg:#16181d; --panel:#1e2129; --line:#2c313c; --fg:#e8eaf0; --dim:#8b93a5;
+  --accent:#7fb2ff; --ok:#5fd08a; --ok-bg:#1c3a2a;
+  --warn-bg:#4a2c12; --warn-fg:#ffc98a; --warn-line:#7a4c1d; --sel:#2d4a7c;
+  --fs:21px; --cand-fs:20px;
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --line:#dfe3ea; --fg:#1c1f26; --dim:#6b7383;
+    --accent:#1f5fbf; --ok:#1c7c46; --ok-bg:#dcf3e5;
+    --warn-bg:#fff3d9; --warn-fg:#7a4c00; --warn-line:#e6c383; --sel:#cfe0ff;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Heiti TC","Noto Sans TC",sans-serif}
+#app{display:flex;flex-direction:column;height:100dvh;
+  padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+
+#top{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#mode{font-weight:700;font-size:15px;padding:3px 12px;border-radius:999px;
+  background:var(--accent);color:var(--bg);border:0;cursor:pointer;font-family:inherit}
+#mode.en{background:var(--line);color:var(--dim)}
+#count{margin-left:auto;font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+#warn{flex:0 0 auto;display:none;padding:10px 14px;font-size:14px;line-height:1.55;
+  background:var(--warn-bg);color:var(--warn-fg);border-bottom:1px solid var(--warn-line)}
+#warn.show{display:block}
+#warn b{color:inherit}
+
+#ta{flex:1 1 auto;width:100%;min-height:0;resize:none;border:0;outline:0;
+  background:var(--bg);color:var(--fg);padding:18px 16px;
+  font-family:inherit;font-size:var(--fs);line-height:1.85;letter-spacing:.02em;
+  -webkit-user-select:text}
+
+/* 候選列：也拿來顯示引擎提示（標記時的「按下 Enter 加入詞彙」）和通知 */
+#cand{flex:0 0 auto;display:none;align-items:center;gap:2px;overflow-x:auto;
+  padding:8px 10px;background:var(--panel);border-top:1px solid var(--line);scrollbar-width:none}
+#cand::-webkit-scrollbar{display:none}
+#cand.show{display:flex}
+#cand .tip{flex:0 0 auto;padding:6px 10px;font-size:14px;color:var(--dim);white-space:nowrap}
+#cand .tip.ok{color:var(--ok);font-weight:600}
+.cand{display:inline-flex;align-items:baseline;gap:5px;flex:0 0 auto;
+  padding:6px 11px;border-radius:8px;font-size:var(--cand-fs);white-space:nowrap;cursor:pointer}
+.cand.sel{background:var(--sel)}
+.cand i{font-style:normal;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+#cand .page{flex:0 0 auto;margin-left:auto;padding-left:10px;font-size:12px;color:var(--dim)}
+
+#tools{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px;
+  padding-bottom:calc(8px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--line);background:var(--panel)}
+#tools button{flex:0 0 auto;font-family:inherit;font-size:14px;padding:8px 14px;
+  border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+#tools button:active{background:var(--line)}
+
+#boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--bg);color:var(--dim);font-size:15px;z-index:50}
+#boot.gone{display:none}
+
+/* 詞庫管理 */
+#lex{width:min(560px,calc(100vw - 32px));max-height:min(80dvh,640px);padding:0;
+  border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--fg);
+  font-family:inherit}
+#lex[open]{display:flex;flex-direction:column}
+#lex::backdrop{background:rgba(0,0,0,.45)}
+#lex .lex-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+#lex .lex-head b{font-size:16px}
+#lex-n{font-size:13px;color:var(--dim)}
+#lex button{font-family:inherit;font-size:14px;padding:6px 12px;border-radius:8px;
+  border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+#lex-done{margin-left:auto;background:var(--accent)!important;color:var(--bg)!important;border-color:var(--accent)!important;font-weight:700}
+#lex .lex-how{margin:0;padding:10px 16px;font-size:13px;line-height:1.6;color:var(--dim)}
+#lex .lex-how b{color:var(--fg)}
+#lex-list{list-style:none;margin:0;padding:0 8px;overflow-y:auto;flex:1 1 auto;min-height:60px}
+#lex-list li{display:flex;align-items:center;gap:12px;padding:8px;border-bottom:1px solid var(--line)}
+#lex-list li:last-child{border-bottom:0}
+#lex-list .w{font-size:19px}
+#lex-list .r{font-size:13px;color:var(--dim);flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lex-list li.x .w{text-decoration:line-through;color:var(--dim)}
+#lex-list li.empty{color:var(--dim);font-size:14px;justify-content:center}
+#lex-text{margin:10px 16px 0;padding:8px 10px;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg);color:var(--fg);font-family:inherit;font-size:15px;line-height:1.5;resize:vertical}
+#lex .lex-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px 14px}
+#lex-msg{font-size:13px;color:var(--dim)}
